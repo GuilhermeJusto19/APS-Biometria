@@ -1,0 +1,16 @@
+site_name: APS - Biometria
+repo_url: https://github.com/GuilhermeJusto19/APS-Biometria
+repo_name: GuilhermeJusto19/APS-Biometria
+edit_url: tree/main/docs
+
+theme:
+  name: material
+  language: pt-BR
+  logo: assets/logo.png
+  favicon: assets/logo.png
+
+markdown_extensions:
+  - attr_list
+
+extra_css:
+  - stylesheet/extra.css
