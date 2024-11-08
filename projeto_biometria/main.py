@@ -1,3 +1,6 @@
-import gui_components.gui_login
+import gui_components.gui_main
 
-gui_components.gui_login.LoginScreen()
+if __name__ == '__main__':
+ app = gui_components.gui_main.MainWindow()
+ app.mainloop()
+

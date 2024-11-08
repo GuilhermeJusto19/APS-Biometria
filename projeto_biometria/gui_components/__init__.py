@@ -1,1 +1,1 @@
-from gui_components.gui_login import *
+_all_ = ['gui_cadastro', 'gui_login']
