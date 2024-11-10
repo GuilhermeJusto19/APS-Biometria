@@ -1,6 +1,7 @@
 import tkinter as tk
+from db_components.db_control import BancoDados
 from pathlib import Path
-from tkinter import ttk
+from tkinter import ttk, messagebox
 
 OUTPUT_PATH = Path(__file__).parent
 ASSETS_PATH = OUTPUT_PATH / Path(
@@ -174,7 +175,7 @@ class LoginScreen(tk.Frame):
             image=self.button_image_entrar,
             borderwidth=0,
             highlightthickness=0,
-            command=lambda: print('botão entrar foi clicado'),
+            command=lambda: self.button_entrar_func(controller),
             relief='flat',
         )
         self.button_entrar.place(
@@ -213,6 +214,26 @@ class LoginScreen(tk.Frame):
             width=64.0,
             height=46.65594482421875,
         )
+    
+    def button_entrar_func(self, controller):
+        self.username = self.entry_login.get()
+        self.password = self.entry_senha.get()
+
+        db_conn = BancoDados()
+        acesso = db_conn.altenticar_user(self.username, self.password)
+
+        if acesso:
+            messagebox.showerror(title='ERROR', message='Login ou senha incorreta')
+        else:
+            controller.show_frame(ConsultaScreen)
+
+        db_conn.desconecta_db()
+
+    def pegar_digital(self):
+        # Pegar imagem do explorador de arquivos
+        # Rodar extração de minucias
+        # Chamar banco para comparar
+        pass
 
 class CadastroScreen(tk.Frame):
     """Janela de Cadastro do User"""
@@ -345,7 +366,7 @@ class CadastroScreen(tk.Frame):
         self.entry_bg_acl = self.canvas.create_image(
             349.5782012939453, 330, image=self.entry_image_acl
         )
-        self.choices = ['1 - Geral', '2 - Superior', '3 - Admin']
+        self.choices = ['1 - ALTO', '2 - MEDIO', '3 - BAIXO']
         self.combo_style = ttk.Style()
         self.combo_style.theme_use('alt')
         self.combo_style.map(
@@ -380,7 +401,7 @@ class CadastroScreen(tk.Frame):
             image=self.button_image_entrar,
             borderwidth=0,
             highlightthickness=0,
-            command=lambda:print('Botão cadastrar'),
+            command=lambda:self.button_cadastro_user_function(),
             relief='flat',
         )
         self.button_entrar.place(x=238.0, y=365, width=225.0, height=35.0)
@@ -416,8 +437,27 @@ class CadastroScreen(tk.Frame):
             y=12.34405517578125,
             width=55.0,
             height=44,
-        )     
+        )
+    
+    def button_cadastro_user_function(self):
+        self.username = self.entry_login.get()
+        self.password = self.entry_senha.get()
+        self.role = self.entry_acl.get()
+        if self.role == '1 - ALTO':
+            self.role = 1
+        elif self.role == '2 - MEDIO':
+            self.role = 2
+        elif self.role == '3 - BAIXO':
+            self.role = 3
+        else:
+            self.role = ''
         
+        if self.username =='' or self.password == '' or self.role == '':
+            messagebox.showerror(title='ERROR', message='Nenhum dos campos deve estar vazio')
+        else:
+            db_conn = BancoDados()
+            db_conn.inserir_user(self.username, self.password, self.role)
+      
 class ConsultaScreen(tk.Frame):
     """Janela Principal"""
     def __init__(self, parent, controller):
@@ -552,7 +592,7 @@ class ConsultaScreen(tk.Frame):
             image=self.button_image_pesquisar,
             borderwidth=0,
             highlightthickness=0,
-            command= lambda:print('Botao pesquisa'),
+            command= lambda:self.button_pesquisar_func(),
             relief='flat',
         )
         self.button_pesquisar.place(
@@ -590,7 +630,29 @@ class ConsultaScreen(tk.Frame):
             width=20,
             height=400, 
         )
+        self.mostrar_lista()
+    
+    def mostrar_lista(self):
+        self.table_propriedades.delete(*self.table_propriedades.get_children())
+        db_conn = BancoDados()
+        lista_dados = db_conn.select_lista()
+
+        for i in lista_dados:
+            self.table_propriedades.insert('','end',values=i)
         
+        db_conn.desconecta_db()
+    
+    def button_pesquisar_func(self):
+        self.pesquisa = self.entry_pesquisar.get()
+        self.table_propriedades.delete(*self.table_propriedades.get_children())
+        db_conn = BancoDados()
+        lista_dados = db_conn.pesquisar_lista(self.pesquisa)
+
+        for i in lista_dados:
+            self.table_propriedades.insert('','end',values=i)
+        
+        db_conn.desconecta_db()
+       
 class InserirScreen(tk.Frame):
     """Janela para Inserir Cadastros de dados"""
     def __init__(self, parent, controller):
@@ -732,7 +794,7 @@ class InserirScreen(tk.Frame):
             image=self.button_image_limpar,
             borderwidth=0,
             highlightthickness=0,
-            command= lambda:print('Botao limpar'),
+            command= lambda:self.button_limpar_func(),
             relief='flat',
         )
         self.button_limpar.place(
@@ -829,6 +891,10 @@ class InserirScreen(tk.Frame):
             width=254,
             height=34,
         )
+    def button_limpar_func(self):
+        self.entry_nome.delete(0, 'end')
+        self.entry_info.delete('1.0','end')
+        self.entry_nivel.delete(0, 'end')
 
 class DeletarScreen(tk.Frame):
     """Janela para Deletar cadastros de dados"""
@@ -931,7 +997,7 @@ class DeletarScreen(tk.Frame):
         self.form_bg = self.canvas.create_image(
             349.5782012939453, 320, image=self.form_image_rectangle
         )
-        # Texto principal - Propriedas rurais
+        # Texto principal - Deletar Registros
         self.canvas.create_text(
             27,
             70,
@@ -949,7 +1015,7 @@ class DeletarScreen(tk.Frame):
             image=self.button_image_limpar,
             borderwidth=0,
             highlightthickness=0,
-            command= lambda:print('Botao limpar'),
+            command= lambda:self.button_limpar_func(),
             relief='flat',
         )
         self.button_limpar.place(
@@ -1000,3 +1066,6 @@ class DeletarScreen(tk.Frame):
             width=254,
             height=34,
         )
+
+    def button_limpar_func(self):
+        self.entry_nome.delete(0, 'end')
