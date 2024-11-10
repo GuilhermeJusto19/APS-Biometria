@@ -1,7 +1,14 @@
 import tkinter as tk
+
 from db_components.db_control import BancoDados
+from biometria_components.biometria_control import processamento_fingerprint
 from pathlib import Path
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
+
+#Global Vars
+USER_NAME = ''
+USER_ROLE = ''
+USER_HASH = ''
 
 OUTPUT_PATH = Path(__file__).parent
 ASSETS_PATH = OUTPUT_PATH / Path(
@@ -34,7 +41,7 @@ class MainWindow(tk.Tk):
             self.frames[F] = frame
             frame.grid(row=0, column=0, sticky=(tk.E + tk.W + tk.N + tk.S))
 
-        self.show_frame(ConsultaScreen)
+        self.show_frame(LoginScreen)
 
     def show_frame(self, cont):
             frame = self.frames[cont]
@@ -190,7 +197,7 @@ class LoginScreen(tk.Frame):
             image=self.button_image_digital,
             borderwidth=0,
             highlightthickness=0,
-            command=lambda: print('botão digital foi clicado'),
+            command=lambda: self.button_entrar_digital(controller),
             relief='flat',
         )
         self.button_digital.place(
@@ -216,24 +223,41 @@ class LoginScreen(tk.Frame):
         )
     
     def button_entrar_func(self, controller):
+        global USER_NAME, USER_ROLE
         self.username = self.entry_login.get()
+        self.username = self.username.strip()
         self.password = self.entry_senha.get()
+        self.password = self.password.strip()
 
         db_conn = BancoDados()
-        acesso = db_conn.altenticar_user(self.username, self.password)
+        acesso, name, role = db_conn.altenticar_user(self.username, self.password)
 
-        if acesso:
+        if not acesso:
             messagebox.showerror(title='ERROR', message='Login ou senha incorreta')
         else:
             controller.show_frame(ConsultaScreen)
+            USER_NAME = name
+            USER_ROLE = role
 
         db_conn.desconecta_db()
 
-    def pegar_digital(self):
+    def button_entrar_digital(self, controller):
         # Pegar imagem do explorador de arquivos
+        filepath = filedialog.askopenfilename()
         # Rodar extração de minucias
+        self.hash = processamento_fingerprint(filepath)
         # Chamar banco para comparar
-        pass
+        global USER_NAME, USER_ROLE
+        db_conn = BancoDados()
+        acesso, name, role = db_conn.altenticar_user_fingerprint(self.hash)
+
+        if not acesso:
+            messagebox.showerror(title='ERROR', message='Digital não cadastrada')
+        else:
+            controller.show_frame(ConsultaScreen)
+            USER_NAME = name
+            USER_ROLE = role
+        db_conn.desconecta_db()
 
 class CadastroScreen(tk.Frame):
     """Janela de Cadastro do User"""
@@ -366,7 +390,7 @@ class CadastroScreen(tk.Frame):
         self.entry_bg_acl = self.canvas.create_image(
             349.5782012939453, 330, image=self.entry_image_acl
         )
-        self.choices = ['1 - ALTO', '2 - MEDIO', '3 - BAIXO']
+        self.choices = ['3 - ALTO', '2 - MEDIO', '1 - BAIXO']
         self.combo_style = ttk.Style()
         self.combo_style.theme_use('alt')
         self.combo_style.map(
@@ -414,7 +438,7 @@ class CadastroScreen(tk.Frame):
             image=self.button_image_cadastradigital,
             borderwidth=0,
             highlightthickness=0,
-            command=lambda:print('Botão cadastrar digital'),
+            command=lambda:self.pegar_digital(),
             relief='flat',
         )
         self.button_cadastradigital.place(
@@ -441,23 +465,44 @@ class CadastroScreen(tk.Frame):
     
     def button_cadastro_user_function(self):
         self.username = self.entry_login.get()
+        self.username = self.username.strip()
         self.password = self.entry_senha.get()
+        self.password = self.password.strip()
         self.role = self.entry_acl.get()
-        if self.role == '1 - ALTO':
-            self.role = 1
+        global USER_HASH
+        if USER_HASH == '':
+            self.hash = self.pegar_digital()
+            self.hash = USER_HASH
+        else:
+            self.hash = USER_HASH
+
+        if self.role == '3 - ALTO':
+            self.role = 3
         elif self.role == '2 - MEDIO':
             self.role = 2
-        elif self.role == '3 - BAIXO':
-            self.role = 3
+        elif self.role == '1 - BAIXO':
+            self.role = 1
         else:
             self.role = ''
         
-        if self.username =='' or self.password == '' or self.role == '':
+        if self.username =='' or self.password == '' or self.role == '' or self.hash == '':
             messagebox.showerror(title='ERROR', message='Nenhum dos campos deve estar vazio')
         else:
             db_conn = BancoDados()
-            db_conn.inserir_user(self.username, self.password, self.role)
-      
+            inserido = db_conn.inserir_user(self.username, self.password, self.role, self.hash)
+
+            if inserido:
+                messagebox.showerror(title='ERROR', message='Já Existe um User com esse nome')
+            else: 
+                messagebox.showinfo(title='SUCESSO', message='Usuario Criado')
+    
+    def pegar_digital(self):
+        # Pegar imagem do explorador de arquivos
+        filepath = filedialog.askopenfilename()
+        # Rodar extração de minucias
+        global USER_HASH
+        USER_HASH = processamento_fingerprint(filepath)
+
 class ConsultaScreen(tk.Frame):
     """Janela Principal"""
     def __init__(self, parent, controller):
@@ -537,7 +582,7 @@ class ConsultaScreen(tk.Frame):
             self.canvas,
             bg= '#AAFF90',
             anchor='center',
-            text='Nome do user',
+            text= 'Nome do user',
             font=('Poppins Regular', 13 * -1),
         )
         self.label_nome.place(
@@ -630,12 +675,29 @@ class ConsultaScreen(tk.Frame):
             width=20,
             height=400, 
         )
-        self.mostrar_lista()
+        #Botão atualizar lista
+        self.button_image_atualizar = tk.PhotoImage(
+            file=relative_to_assets('button_atualizar.png')
+        )
+        self.button_esqueci = tk.Button(
+            self.canvas,
+            image=self.button_image_atualizar,
+            borderwidth=0,
+            highlightthickness=0,
+            relief='flat',
+            command=lambda: self.mostrar_lista(),
+        )
+        self.button_esqueci.place(
+            x=352,
+            y=60,
+            width=40,
+            height=40,
+        )
     
     def mostrar_lista(self):
         self.table_propriedades.delete(*self.table_propriedades.get_children())
         db_conn = BancoDados()
-        lista_dados = db_conn.select_lista()
+        lista_dados = db_conn.select_lista(USER_ROLE)
 
         for i in lista_dados:
             self.table_propriedades.insert('','end',values=i)
@@ -643,16 +705,16 @@ class ConsultaScreen(tk.Frame):
         db_conn.desconecta_db()
     
     def button_pesquisar_func(self):
+        global USER_NAME, USER_ROLE
         self.pesquisa = self.entry_pesquisar.get()
         self.table_propriedades.delete(*self.table_propriedades.get_children())
         db_conn = BancoDados()
-        lista_dados = db_conn.pesquisar_lista(self.pesquisa)
+        lista_dados = db_conn.pesquisar_lista(self.pesquisa, USER_ROLE)
 
         for i in lista_dados:
             self.table_propriedades.insert('','end',values=i)
         
-        db_conn.desconecta_db()
-       
+        db_conn.desconecta_db()      
 class InserirScreen(tk.Frame):
     """Janela para Inserir Cadastros de dados"""
     def __init__(self, parent, controller):
@@ -833,8 +895,25 @@ class InserirScreen(tk.Frame):
         self.entry_bg_nivel = self.canvas.create_image(
             265, 270, image=self.entry_image_nivel
         )
-        self.entry_nivel = tk.Entry(
-            self.canvas, bd=0, bg='#FFFFFF', fg='#000716', highlightthickness=0
+        self.choices = ['3 - ALTO', '2 - MEDIO', '1 - BAIXO']
+        self.combo_style = ttk.Style()
+        self.combo_style.theme_use('alt')
+        self.combo_style.map(
+            'TCombobox', fieldbackground=[('readonly', 'white')]
+        )
+        self.combo_style.configure(
+            'TCombobox',
+            background='white',
+            font=('Helvetica', 24),
+            borderwidth=0,
+            relif='flat',
+            bordercolor='#FFFFFF',
+        )
+        self.entry_nivel = ttk.Combobox(
+            self.canvas,
+            values=self.choices,
+            style='TCombobox',
+            state='readonly',
         )
         self.entry_nivel.place(
             x= 65,
@@ -882,7 +961,7 @@ class InserirScreen(tk.Frame):
             image=self.button_image_cadastrar_registro,
             borderwidth=0,
             highlightthickness=0,
-            command= lambda:print('Botão de cadastro registro'),
+            command= lambda:self.button_cadastrar_func(),
             relief='flat',
         )
         self.button_cadastrar_resgitro.place(
@@ -891,10 +970,31 @@ class InserirScreen(tk.Frame):
             width=254,
             height=34,
         )
+
     def button_limpar_func(self):
         self.entry_nome.delete(0, 'end')
         self.entry_info.delete('1.0','end')
         self.entry_nivel.delete(0, 'end')
+    
+    def button_cadastrar_func(self):
+        self.name = self.entry_nome.get()
+        self.name = self.name.strip()
+        self.info = self.entry_info.get('1.0','end')
+        self.acl = self.entry_nivel.get()
+        if self.acl == '3 - ALTO':
+            self.acl = 3
+        elif self.acl == '2 - MEDIO':
+            self.acl = 2
+        elif self.acl == '1 - BAIXO':
+            self.acl = 1
+        else:
+            self.acl = ''
+        
+        if self.name =='' or self.info == '' or self.acl == '':
+            messagebox.showerror(title='ERROR', message='Nenhum dos campos deve estar vazio')
+        else:
+            db_conn = BancoDados()
+            db_conn.inserir_propriedade(self.name, self.info, self.acl)
 
 class DeletarScreen(tk.Frame):
     """Janela para Deletar cadastros de dados"""
@@ -1057,7 +1157,7 @@ class DeletarScreen(tk.Frame):
             image=self.button_image_deletar_registro,
             borderwidth=0,
             highlightthickness=0,
-            command= lambda:print('Botão de deletar registro'),
+            command= lambda:self.button_deletar_func(),
             relief='flat',
         )
         self.button_deletar_resgitro.place(
@@ -1069,3 +1169,9 @@ class DeletarScreen(tk.Frame):
 
     def button_limpar_func(self):
         self.entry_nome.delete(0, 'end')
+    
+    def button_deletar_func(self):
+        self.nome = self.entry_nome.get()
+
+        db_conn = BancoDados()
+        db_conn.deletar_propriedade(self.nome)
